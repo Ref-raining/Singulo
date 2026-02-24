@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>双生AI - 宇宙奇点交互系统 (终极体验版)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { position: absolute; top: 0; width: 100%; height: 100%; }
+        
+        /* 修复一：绝对定位确保奇点和文字绝对居中，解决截图中的偏移问题 */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; transition: opacity 0.5s; }
+        .hint { position: absolute; top: calc(50% - 70px); left: 50%; transform: translateX(-50%); color: #666; letter-spacing: 2px; transition: color 0.3s; white-space: nowrap; text-align: center;}
+        
+        #singularity {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1);
+            width: 20px; height: 20px; background: #fff; border-radius: 50%;
+            box-shadow: 0 0 20px #fff; pointer-events: auto; cursor: pointer;
+            transition: background 0.3s, box-shadow 0.3s; /* 移除transform过渡，交由JS实时控制 */
+        }
+
+        #flash-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 100; }
+
+        /* 修复四：悬停预览文字移到上方 */
+        #label-preview {
+            position: fixed; top: 40px; left: 50%; transform: translateX(-50%);
+            color: #0ff; font-size: 1.5rem; letter-spacing: 5px; text-shadow: 0 0 10px #0ff;
+            opacity: 0; pointer-events: none; z-index: 5; transition: opacity 0.3s;
+        }
+
+        /* 新增：双击后屏幕中央显现的酷炫文字 Tag */
+        #content-tag {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.5);
+            color: #fff; font-size: 3.5rem; font-weight: bold; letter-spacing: 8px;
+            text-shadow: 0 0 20px #fff, 0 0 40px var(--glow-color, #0ff);
+            opacity: 0; pointer-events: none; z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="flash-overlay"></div>
+    <div id="canvas-container"></div>
+    
+    <div id="label-preview">EXPLORING...</div>
+    <div id="content-tag">标签内容</div>
+    
+    <div id="ui-layer">
+        <div class="hint" id="hint-text">长按奇点或空格键蓄力</div>
+        <div id="singularity"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        /** 1. 基础场景初始化 **/
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.003); 
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 0, 200);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enabled = false; 
+        controls.enableDamping = true;
+        // 修复二：自定义滚轮缩放距离限制
+        controls.enableZoom = false; 
+        controls.minDistance = 30;  // 最近不能贴脸穿模
+        controls.maxDistance = 400; // 最远不能把宇宙缩成一个点
+        
+        // 使用控制器的自动旋转，代替手动旋转星系群组
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.0; 
+
+        const galaxyGroup = new THREE.Group();
+        scene.add(galaxyGroup);
+
+        /** 2. 蓄力交互逻辑 **/
+        let chargeLevel = 0; 
+        let isCharging = false;
+        let chargeInterval;
+        const singularity = document.getElementById('singularity');
+        const flash = document.getElementById('flash-overlay');
+        const hint = document.getElementById('hint-text');
+
+        function startCharge(e) {
+            if(controls.enabled) return;
+            if(e) e.preventDefault();
+            isCharging = true;
+            chargeInterval = setInterval(() => {
+                chargeLevel += 0.02;
+                if(chargeLevel > 1) chargeLevel = 1;
+                updateChargeEffect();
+            }, 20);
+        }
+
+        function stopCharge(e) {
+            if(!isCharging) return;
+            if(e) e.preventDefault();
+            clearInterval(chargeInterval);
+            if(chargeLevel >= 0.9) {
+                bigBang();
+            } else {
+                chargeLevel = 0;
+                updateChargeEffect();
+            }
+            isCharging = false;
+        }
+
+        function updateChargeEffect() {
+            const scale = 1 + chargeLevel * 3;
+            // 修复一：使用 translate(-50%, -50%) 加上 scale 保持绝对居中
+            singularity.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            
+            if(chargeLevel < 0.4) {
+                singularity.style.background = "#fff";
+                singularity.style.boxShadow = `0 0 ${20*scale}px #fff`;
+                hint.innerText = "长按奇点或空格键蓄力";
+                hint.style.color = "#666";
+            } else if(chargeLevel < 0.8) {
+                singularity.style.background = "#a0f"; 
+                singularity.style.boxShadow = `0 0 ${30*scale}px #a0f`;
+                hint.innerText = "能量激增...";
+                hint.style.color = "#a0f";
+            } else {
+                singularity.style.background = "#f05"; 
+                singularity.style.boxShadow = `0 0 ${40*scale}px #f05`;
+                hint.innerText = "临界点！！释放！";
+                hint.style.color = "#f05";
+            }
+        }
+
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space' && !e.repeat) startCharge(); });
+        window.addEventListener('keyup', (e) => { if(e.code === 'Space') stopCharge(); });
+        singularity.addEventListener('mousedown', startCharge);
+        window.addEventListener('mouseup', stopCharge);
+        singularity.addEventListener('touchstart', startCharge, {passive: false});
+        window.addEventListener('touchend', stopCharge);
+
+        /** 3. 爆炸与星球生成 **/
+        const planets = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredObj = null;
+        let focusedObj = null; 
+
+        function bigBang() {
+            gsap.to(flash, { opacity: 1, duration: 0.1, onComplete: () => {
+                document.getElementById('ui-layer').style.display = 'none';
+                controls.enabled = true;
+                
+                const colors = [0x00ffff, 0xff00ff, 0xff3300, 0x55ff00];
+                const interestTags = ["赛车马力", "键盘DIY", "机械舞", "Web3", "量子计算", "赛博朋克", "AIGC"];
+
+                for(let i=0; i<80; i++) {
+                    const colorHex = colors[i % colors.length];
+                    const geo = new THREE.SphereGeometry(Math.random()*2+1, 24, 24);
+                    const mat = new THREE.MeshStandardMaterial({ 
+                        color: colorHex,
+                        emissive: colorHex,
+                        emissiveIntensity: 0.5 
+                    });
+                    const sphere = new THREE.Mesh(geo, mat);
+                    
+                    sphere.userData = { 
+                        name: interestTags[i % interestTags.length] + " #" + i,
+                        baseEmissive: 0.5,
+                        colorHex: colorHex // 保存颜色用于文字发光
+                    };
+
+                    const radius = 50 + Math.random() * 150;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos((Math.random() * 2) - 1);
+
+                    sphere.position.set(0,0,0);
+                    galaxyGroup.add(sphere);
+                    planets.push(sphere);
+
+                    gsap.to(sphere.position, {
+                        x: radius * Math.sin(phi) * Math.cos(theta),
+                        y: radius * Math.sin(phi) * Math.sin(theta),
+                        z: radius * Math.cos(phi),
+                        duration: 2,
+                        ease: "power4.out",
+                        delay: Math.random() * 0.5
+                    });
+                }
+                
+                scene.add(new THREE.PointLight(0xffffff, 1, 500));
+                scene.add(new THREE.AmbientLight(0x444444));
+
+                gsap.to(flash, { opacity: 0, duration: 1.5 });
+            }});
+        }
+
+        /** 4. 鼠标、滚动与点击核心逻辑 **/
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        // 修复三：步进式自定义滚轮缩放
+        window.addEventListener('wheel', (e) => {
+            if(!controls.enabled) return;
+            const zoomStep = 10; 
+            const direction = Math.sign(e.deltaY); 
+            const currentDist = camera.position.distanceTo(controls.target);
+            let targetDist = Math.max(controls.minDistance, Math.min(controls.maxDistance, currentDist + direction * zoomStep));
+            
+            const camDirection = camera.position.clone().sub(controls.target).normalize();
+            const newCamPos = controls.target.clone().add(camDirection.multiplyScalar(targetDist));
+
+            gsap.to(camera.position, {
+                x: newCamPos.x, y: newCamPos.y, z: newCamPos.z,
+                duration: 0.3, ease: "power2.out", overwrite: "auto"
+            });
+        });
+
+        // 星环特效
+        function triggerRingEffect(planet) {
+            if(planet.userData.isRinging) return;
+            planet.userData.isRinging = true;
+
+            const ringGeo = new THREE.TorusGeometry(4, 0.1, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ 
+                color: planet.material.color, transparent: true, opacity: 0, side: THREE.DoubleSide
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            
+            ring.rotation.x = Math.PI / 3; ring.rotation.y = Math.PI / 4;
+            planet.add(ring);
+
+            const tl = gsap.timeline({ onComplete: () => { planet.remove(ring); planet.userData.isRinging = false; } });
+            tl.to(ringMat, { opacity: 1, duration: 0.1 })
+              .to(ring.scale, { x: 4, y: 4, z: 4, duration: 1.2, ease: "power2.out" }, "<")
+              .to(ringMat, { opacity: 0, duration: 0.8 }, "-=0.8");
+
+            gsap.to(planet.material, { 
+                emissiveIntensity: 1.8, duration: 0.2, yoyo: true, repeat: 1,
+                onComplete: () => { planet.material.emissiveIntensity = planet.userData.baseEmissive; }
+            });
+        }
+
+        // 视角飞跃封装函数 (支持调整速度，且不打断宇宙自转)
+        function flyToObject(obj, duration, onCompleteCB) {
+            focusedObj = obj; // 立即标记为焦点，这使得悬停逻辑会立刻恢复宇宙自转
+            const targetPos = new THREE.Vector3();
+            obj.getWorldPosition(targetPos);
+            
+            const direction = camera.position.clone().sub(targetPos).normalize();
+            const newCamPos = targetPos.clone().add(direction.multiplyScalar(60));
+
+            // overwrite: "auto" 可以无缝覆盖上一次没跑完的动画
+            gsap.to(controls.target, { x: targetPos.x, y: targetPos.y, z: targetPos.z, duration: duration, ease: "power3.inOut", overwrite: "auto" });
+            gsap.to(camera.position, { x: newCamPos.x, y: newCamPos.y, z: newCamPos.z, duration: duration, ease: "power3.inOut", overwrite: "auto", onComplete: onCompleteCB });
+        }
+
+        // 双击文字爆发特效 (取代了原本的 Alert)
+        function showContentText(obj) {
+            triggerRingEffect(obj); // 顺便触发一下星环
+            
+            const tag = document.getElementById('content-tag');
+            tag.innerText = obj.userData.name;
+            // 将星球颜色的 Hex 转换为 CSS 变量，让文字发同样颜色的光
+            const hexColor = '#' + obj.userData.colorHex.toString(16).padStart(6, '0');
+            tag.style.setProperty('--glow-color', hexColor);
+            
+            // 文字动画：从小放大、渐现、悬停一会儿再像星环一样消散
+            const tl = gsap.timeline();
+            tl.fromTo(tag, 
+                { opacity: 0, scale: 0.2 },
+                { opacity: 1, scale: 1.2, duration: 0.4, ease: "back.out(1.5)" }
+            )
+            .to(tag, { scale: 1, duration: 0.2 })
+            .to(tag, { opacity: 0, scale: 1.5, duration: 0.6, delay: 1.5, ease: "power2.in" });
+        }
+
+        // 单击：仅焦点转移 / 或者爆发星环
+        window.addEventListener('click', () => {
+            if(hoveredObj) {
+                if (hoveredObj === focusedObj) {
+                    // 已经在中央，单击只闪星环，不触发镜头动画
+                    triggerRingEffect(hoveredObj);
+                } else {
+                    // 常规速度飞跃 (1.5秒)
+                    flyToObject(hoveredObj, 1.5);
+                }
+            }
+        });
+
+        // 双击：进入内容 (极速飞跃 + 文字动画)
+        window.addEventListener('dblclick', () => {
+            if(hoveredObj) {
+                if (hoveredObj === focusedObj) {
+                    // 已经在中央，直接显示特效，期间完全不打断自转
+                    showContentText(hoveredObj);
+                } else {
+                    // 不在中央，极速飞跃(0.6秒)，到达后显示特效
+                    flyToObject(hoveredObj, 0.6, () => {
+                        showContentText(hoveredObj);
+                    });
+                }
+            } else if (controls.enabled) {
+                // 修复四：双击背景复位
+                focusedObj = null; 
+                gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.5, ease: "power3.inOut", overwrite: "auto" });
+                const direction = camera.position.clone().normalize();
+                const resetCamPos = direction.multiplyScalar(200);
+                gsap.to(camera.position, { x: resetCamPos.x, y: resetCamPos.y, z: resetCamPos.z, duration: 1.5, ease: "power3.inOut", overwrite: "auto" });
+            }
+        });
+
+        /** 5. 渲染循环 **/
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if(controls.enabled) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(planets);
+
+                if (intersects.length > 0) {
+                    // 新条件：如果鼠标悬停的是【已经处于视野中央】的小球，不暂停转动！
+                    if (intersects[0].object === focusedObj) {
+                        controls.autoRotate = true; 
+                    } else {
+                        // 悬停其他远处的球时，暂停转动方便点击
+                        controls.autoRotate = false;
+                    }
+                    
+                    if(hoveredObj !== intersects[0].object) {
+                        if(hoveredObj) gsap.to(hoveredObj.scale, { x: 1, y: 1, z: 1, duration: 0.2 });
+                        hoveredObj = intersects[0].object;
+                        gsap.to(hoveredObj.scale, { x: 2, y: 2, z: 2, duration: 0.2 });
+                        
+                        document.getElementById('label-preview').innerText = hoveredObj.userData.name;
+                        document.getElementById('label-preview').style.opacity = 1;
+                        document.body.style.cursor = 'pointer';
+                    }
+                } else {
+                    // 鼠标移开时恢复转动
+                    controls.autoRotate = true;
+                    
+                    if(hoveredObj) {
+                        gsap.to(hoveredObj.scale, { x: 1, y: 1, z: 1, duration: 0.2 });
+                        hoveredObj = null;
+                        document.getElementById('label-preview').style.opacity = 0;
+                        document.body.style.cursor = 'default';
+                    }
+                }
+                
+                controls.update(); 
+            }
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
