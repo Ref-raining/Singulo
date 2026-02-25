@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: singulo-web
+  labels:
+    app: singulo-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: singulo-web
+  template:
+    metadata:
+      labels:
+        app: singulo-web
+    spec:
+      containers:
+        - name: web
+          image: singulo-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: BACKEND_URL
+              value: "http://singulo-backend:4000"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: singulo-backend
+  labels:
+    app: singulo-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: singulo-backend
+  template:
+    metadata:
+      labels:
+        app: singulo-backend
+    spec:
+      containers:
+        - name: backend
+          image: singulo-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          env:
+            - name: PORT
+              value: "4000"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: singulo-secrets
+                  key: OPENAI_API_KEY
+            - name: OPENAI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: singulo-secrets
+                  key: OPENAI_BASE_URL
+            - name: MODEL_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: singulo-secrets
+                  key: MODEL_NAME
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: singulo-backend
+  labels:
+    app: singulo-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: singulo-backend
+  ports:
+    - name: http
+      port: 4000
+      targetPort: 4000
+      protocol: TCP
